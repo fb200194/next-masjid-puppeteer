@@ -1,5 +1,5 @@
 const puppeteer = require("puppeteer");
-const { promises, createWriteStream } = require("fs");
+const { promises } = require("fs");
 const path = require("path");
 const hb = require("handlebars");
 const merge = require("easy-pdf-merge");
