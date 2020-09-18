@@ -134,7 +134,7 @@ class NextMasjidReport {
     }
   }
 
-  async _getStaticMap({ lat, long, width, height, zoom }) {
+  _getStaticMap({ lat, long, width, height, zoom }) {
     const fullGMAPApiUrl = `${GMAP_URL}?zoom=${zoom}&scale=2&size=${width}x${height}&maptype=terrain&center=${lat},${long},&zoom=${zoom}&markers=icon:${MARKER}%7C${lat},${long}&path=color:0x0000FF80%7Cweight:5%7C${lat},${long}&key=${GMAP_API_KEY}`;
     const mapImageName = `${lat}-${long}-${zoom}.png`;
 
