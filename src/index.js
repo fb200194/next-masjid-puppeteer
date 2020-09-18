@@ -2,7 +2,7 @@ const puppeteer = require("puppeteer");
 const { promises } = require("fs");
 const path = require("path");
 const hb = require("handlebars");
-const merge = require("easy-pdf-merge");
+const PDFMerger = require("pdf-merger-js");
 const request = require("request");
 const AWS = require("aws-sdk");
 
@@ -10,6 +10,8 @@ const s3 = new AWS.S3({
   accessKeyId: "AKIAY6V54NC6XTWXGK2F",
   secretAccessKey: "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",
 });
+
+const pdfMerger = new PDFMerger();
 
 //=== GMAP const
 const GMAP_API_KEY = "AIzaSyC2Kcxwvpo5WJ2pM9Dbr2dKCFjS2wZwFoM";
@@ -126,9 +128,9 @@ class NextMasjidReport {
 
       await browser.close();
 
-      if (await this._mergeGeneratedReports()) {
-        console.log("PDF Generated!");
-      }
+      await this._mergeGeneratedReports();
+
+      console.log("PDF generated !!");
     } catch (err) {
       return err;
     }
@@ -163,25 +165,23 @@ class NextMasjidReport {
     });
   }
 
-  _mergeGeneratedReports() {
-    const pdfReport = `${PDF_FOLDER_PATH}/sample-masjid.pdf`;
+  async _mergeGeneratedReports() {
+    try {
+      const pdfReport = `${PDF_FOLDER_PATH}/sample-masjid.pdf`;
 
-    return new Promise((resolve, reject) => {
       if (!this._generatedReports.length) {
-        return resolve(false);
+        return false;
       }
 
-      merge(this._generatedReports, pdfReport, (err) => {
-        if (err) return reject(err);
+      for (const generatedReport of this._generatedReports) {
+        pdfMerger.add(`./${generatedReport}`);
+        await promises.unlink(`./${generatedReport}`);
+      }
 
-        this._generatedReports.map(
-          async (generatedReport) =>
-            await promises.unlink(`./${generatedReport}`)
-        );
-
-        resolve(true);
-      });
-    });
+      await pdfMerger.save(pdfReport);
+    } catch (err) {
+      console.log(err);
+    }
   }
 
   // (TODO) Let's make this run on server but for testing i'm using s3.
@@ -189,11 +189,11 @@ class NextMasjidReport {
     return new Promise((resolve, reject) => {
       s3.putObject(
         {
-          ACL: 'public-read',
+          ACL: "public-read",
           Body: body,
           Key: fileName,
           Bucket: "badea",
-          ContentType: 'image/png'
+          ContentType: "image/png",
         },
         (error) => {
           if (error) {
@@ -217,8 +217,8 @@ nextMasjidReport
     distanceToNearestMosque: 13.2,
     populationDensity: 55,
     mosqueDensity: 14,
-    long: "36.973914403000001",
-    lat: "25.3176452",
+    long: "101.650101",
+    lat: "2.927880",
     firstNearstMosque: "مسجد الحارثة بن صعب - 3.2 كلم, شمال غرب",
     secondNearstMosque: "مسجد الفضيل بن عياض - 3.3 كلم, شمال شرق",
     thirdNearstMosque: "مسجد - 3.9 كلم, جنوب",
