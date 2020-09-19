@@ -51,7 +51,7 @@ Here’s a table of the parameters you can pass with their explanation:
   </tr>
   <tr>
     <td>GMAPApiKey</td>
-    <td>This script uses google map static api to generate photos of the location so this api key is needed in order to utlize GMAPthe api.</td>
+    <td>This script uses google map static api to generate photos of the location so this api key is needed in order to utlize GMAP api.</td>
     <td>String</td>
   </tr>
   <tr>
