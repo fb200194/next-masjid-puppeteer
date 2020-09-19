@@ -5,54 +5,54 @@ const hb = require("handlebars");
 const PDFMerger = require("pdf-merger-js");
 const request = require("request");
 const AWS = require("aws-sdk");
-
-const s3 = new AWS.S3({
-  accessKeyId: "AKIAY6V54NC6XTWXGK2F",
-  secretAccessKey: "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",
-});
+const QRCode = require("qrcode");
 
 const pdfMerger = new PDFMerger();
 
 //=== GMAP const
-const GMAP_API_KEY = "AIzaSyC2Kcxwvpo5WJ2pM9Dbr2dKCFjS2wZwFoM";
 const GMAP_URL = `https://maps.google.com/maps/api/staticmap`;
 const MARKER = "https://badea.s3.amazonaws.com/_Ellipse_+(1).png";
+const MAIN_CONFIG = {
+  pdfFolderPath: path.join(__dirname, "../pdfsGenerated"),
+  footer:
+    '<div class="footer" style="height: 200px; -webkit-print-color-adjust: exact; background-color: #c2ced0; width: 100%;"></div>',
+  header: `<style>#header, #footer { padding: 0 !important; } @page { size: A4; margin: 0;}</style>`,
+};
 
-//=== Template const
-const TEMPLATE_FIRST_PAGE_PATH = "./../template/page1.html";
-const TEMPLATE_SECOND_PAGE_PATH = "./../template/page2.html";
-const TEMPLATE_THIRD_PAGE_PATH = "./../template/page3.html";
-
-const PDF_FOLDER_PATH = path.join(__dirname, "../pdfsGenerated");
-
-const MAIN_FOOTER =
-  '<div class="footer" style="height: 200px; -webkit-print-color-adjust: exact; background-color: #c2ced0; width: 100%;"></div>';
-
-const MAIN_HEADER = `<style>#header, #footer { padding: 0 !important; } @page { size: A4; margin: 0;}</style>`;
-
-const PAGES_TEMPLATES = {
+const PAGES_TEMPLATES_CONFIG = {
   firstPage: {
     marginTop: 200,
-    path: TEMPLATE_FIRST_PAGE_PATH,
-    footer: MAIN_FOOTER,
+    isPreGeneratedPDFPath: true,
+    path: "./../template/firstPage.pdf",
   },
   secondPage: {
     marginTop: 5,
     // Indicate that the page needs to fetch data from google maps and have dynamic text
     shouldFetchDataFromGMAP: true,
-    path: TEMPLATE_SECOND_PAGE_PATH,
-    footer: MAIN_FOOTER,
+    shouldGenerateQR: true,
+    isPreGeneratedPDFPath: false,
+    path: "./../template/page2.html",
   },
   thirdPage: {
     marginTop: 50,
-    path: TEMPLATE_THIRD_PAGE_PATH,
-    footer: MAIN_FOOTER,
+    isPreGeneratedPDFPath: true,
+    path: "./../template/thirdPage.pdf",
   },
 };
 
 class NextMasjidReport {
-  constructor() {
+  constructor(config) {
+    if (config && typeof config !== "object") {
+      throw new Error("Config must be an object");
+    } else if (!config) {
+      config = {};
+    }
+
+    this._config = config;
+    this._s3 = null;
     this._generatedReports = []; // Alist of all the final generated pdf pages that needs to be merged.
+
+    this._setS3Credentials();
   }
 
   async activate(data) {
@@ -60,7 +60,18 @@ class NextMasjidReport {
       throw new Error("An object should be passed");
     }
 
-    await this._generateReportFromData(data);
+    const reportGenerated = await this._generateReportFromData(data);
+    return reportGenerated;
+  }
+
+  _setS3Credentials() {
+    const { s3StorageData } = this._config;
+    if (s3StorageData) {
+      this._s3 = new AWS.S3({
+        accessKeyId: s3StorageData.accessKeyId,
+        secretAccessKey: s3StorageData.secretAccessKey,
+      });
+    }
   }
 
   async _getTemplateFile(currentPath) {
@@ -70,29 +81,33 @@ class NextMasjidReport {
 
   async _generateReportFromData(data) {
     try {
-      const pagesTemplates = Object.keys(PAGES_TEMPLATES);
+      const pagesTemplates = Object.keys(PAGES_TEMPLATES_CONFIG);
       const browser = await puppeteer.launch({ headless: true });
       const page = await browser.newPage();
+      const finalPDFName = `${data.lat},${data.long}.pdf`;
+
+      console.log("Report is generating please wait ....");
 
       for (const currentTemplate of pagesTemplates) {
         const {
           path,
           shouldFetchDataFromGMAP,
+          isPreGeneratedPDFPath,
+          shouldGenerateQR,
           marginTop,
-          footer,
-        } = PAGES_TEMPLATES[currentTemplate];
+        } = PAGES_TEMPLATES_CONFIG[currentTemplate];
         const templateFile = await this._getTemplateFile(path);
 
         if (shouldFetchDataFromGMAP) {
           const [bigMapImage, smallMapImage] = await Promise.all([
-            nextMasjidReport._getStaticMap({
+            this._getStaticMap({
               lat: data.lat,
               long: data.long,
               width: 640,
               height: 640,
               zoom: 17,
             }),
-            nextMasjidReport._getStaticMap({
+            this._getStaticMap({
               lat: data.lat,
               long: data.long,
               width: 287,
@@ -106,39 +121,52 @@ class NextMasjidReport {
           data.smallMapImage = smallMapImage;
         }
 
-        // Add the text to file and compile using HB.
-        const compiledTemplate = hb.compile(templateFile)(data);
-        await page.setContent(compiledTemplate);
+        if (shouldGenerateQR) {
+          data.qrcode = await this._generateQRCode(data.qrcodeUrl);
+          data.qrcodeUrl = data.qrcodeUrl;
+        }
 
-        await page.pdf({
-          path: `${currentTemplate}.pdf`,
-          format: "A4",
-          width: "208mm",
-          height: "298mm",
-          landscape: false,
-          printBackground: true,
-          margin: { top: marginTop, bottom: 70 },
-          displayHeaderFooter: true,
-          footerTemplate: footer ? footer : "",
-          headerTemplate: MAIN_HEADER,
-        });
+        if (isPreGeneratedPDFPath) {
+          this._generatedReports.push({ path, isPreGeneratedPDFPath });
+        } else {
+          // Add the text to file and compile using HB.
+          const compiledTemplate = hb.compile(templateFile)(data);
+          await page.setContent(compiledTemplate);
 
-        this._generatedReports.push(`${currentTemplate}.pdf`);
+          await page.pdf({
+            path: `${currentTemplate}.pdf`,
+            format: "A4",
+            width: "208mm",
+            height: "298mm",
+            landscape: false,
+            printBackground: true,
+            margin: { top: marginTop, bottom: 70 },
+            displayHeaderFooter: true,
+            footerTemplate: MAIN_CONFIG.footer,
+            headerTemplate: MAIN_CONFIG.header,
+          });
+
+          this._generatedReports.push({
+            path: `${currentTemplate}.pdf`,
+            isPreGeneratedPDFPath,
+          });
+        }
       }
 
       await browser.close();
 
-      await this._mergeGeneratedReports();
+      await this._mergeGeneratedReports(finalPDFName);
 
       console.log("PDF generated !!");
+
+      return finalPDFName;
     } catch (err) {
-      return err;
+      console.log(err);
     }
   }
 
   _getStaticMap({ lat, long, width, height, zoom }) {
-    const fullGMAPApiUrl = `${GMAP_URL}?zoom=${zoom}&scale=2&size=${width}x${height}&maptype=terrain&center=${lat},${long},&zoom=${zoom}&markers=icon:${MARKER}%7C${lat},${long}&path=color:0x0000FF80%7Cweight:5%7C${lat},${long}&key=${GMAP_API_KEY}`;
-    const mapImageName = `${lat}-${long}-${zoom}.png`;
+    const fullGMAPApiUrl = `${GMAP_URL}?zoom=${zoom}&scale=2&size=${width}x${height}&maptype=terrain&center=${lat},${long},&zoom=${zoom}&markers=icon:${MARKER}%7C${lat},${long}&path=color:0x0000FF80%7Cweight:5%7C${lat},${long}&key=${this._config.GMAPApiKey}`;
 
     const options = {
       url: fullGMAPApiUrl,
@@ -151,48 +179,60 @@ class NextMasjidReport {
     };
 
     return new Promise((resolve, reject) => {
+      const mapImageName = `${lat}-${long}-${zoom}.png`;
+
       request(options, async (err, response, body) => {
         try {
-          if (err) reject(err);
+          if (err) return reject(err);
 
-          await this._uploadFileToS3(body, mapImageName);
-          resolve(`https://badea.s3.amazonaws.com/${mapImageName}`);
+          if (this._s3 !== null) {
+            const { s3StorageData } = this._config;
+            await this._uploadImageToS3(body, mapImageName);
+            resolve(`${s3StorageData.url}/${mapImageName}`);
+          } else {
+            const GMAPStaticDataUri = await this._responseToDataURI(
+              body,
+              response
+            );
+            resolve(GMAPStaticDataUri);
+          }
         } catch (err) {
           console.log(err);
-          reject(err);
         }
       });
     });
   }
 
-  async _mergeGeneratedReports() {
-    try {
-      const pdfReport = `${PDF_FOLDER_PATH}/sample-masjid.pdf`;
-
-      if (!this._generatedReports.length) {
-        return false;
-      }
-
-      for (const generatedReport of this._generatedReports) {
-        pdfMerger.add(`./${generatedReport}`);
-        await promises.unlink(`./${generatedReport}`);
-      }
-
-      await pdfMerger.save(pdfReport);
-    } catch (err) {
-      console.log(err);
-    }
+  _generateQRCode(url) {
+    return new Promise((resolve, reject) => {
+      QRCode.toDataURL(
+        url,
+        {
+          color: {
+            dark: "#000000",
+            light: "#0000", // Transparent background
+          },
+        },
+        (err, url) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(url);
+          }
+        }
+      );
+    });
   }
 
-  // (TODO) Let's make this run on server but for testing i'm using s3.
-  _uploadFileToS3(body, fileName) {
+  _uploadImageToS3(body, fileName) {
     return new Promise((resolve, reject) => {
-      s3.putObject(
+      const { bucket } = this._config.s3StorageData;
+      this._s3.putObject(
         {
           ACL: "public-read",
           Body: body,
           Key: fileName,
-          Bucket: "badea",
+          Bucket: bucket,
           ContentType: "image/png",
         },
         (error) => {
@@ -205,22 +245,34 @@ class NextMasjidReport {
       );
     });
   }
+
+  async _responseToDataURI(body, response) {
+    return new Promise((resolve, reject) => {
+      const bodyInBase64 = Buffer.from(body, "binary").toString("base64");
+      const dataUriPrefix = `data:${response.headers["content-type"]};base64,`;
+      resolve(`${dataUriPrefix}${bodyInBase64}`);
+    });
+  }
+
+  async _mergeGeneratedReports(finalPDFName) {
+    try {
+      if (!this._generatedReports.length) {
+        return false;
+      }
+
+      const pdfReport = `${MAIN_CONFIG.pdfFolderPath}/${finalPDFName}`;
+      for (const { path, isPreGeneratedPDFPath } of this._generatedReports) {
+        pdfMerger.add(`./${path}`);
+        if (!isPreGeneratedPDFPath) {
+          await promises.unlink(`./${path}`);
+        }
+      }
+
+      await pdfMerger.save(pdfReport);
+    } catch (err) {
+      console.log(err);
+    }
+  }
 }
 
-const nextMasjidReport = new NextMasjidReport();
-
-nextMasjidReport
-  .activate({
-    scoreColor: "#ed462f",
-    score: "83",
-    prayersInPerimeter: 999,
-    distanceToNearestMosque: 13.2,
-    populationDensity: 55,
-    mosqueDensity: 14,
-    long: "101.650101",
-    lat: "2.927880",
-    firstNearstMosque: "مسجد الحارثة بن صعب - 3.2 كلم, شمال غرب",
-    secondNearstMosque: "مسجد الفضيل بن عياض - 3.3 كلم, شمال شرق",
-    thirdNearstMosque: "مسجد - 3.9 كلم, جنوب",
-  })
-  .then(() => console.log("done !!!"));
+module.exports = NextMasjidReport;
