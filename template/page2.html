@@ -246,10 +246,9 @@
       .footer__qr {
         position: fixed;
         bottom: 9px;
-        right: 87px;
-        background: red;
-        width: 90px;
-        height: 72px;
+        right: 104px;
+        background: #ed462f;
+        width: 66px;
       }
     </style>
   </head>
@@ -259,7 +258,7 @@
       <div class="header">
         <div class="header__logo">
           <img
-            src="https://badea.s3.amazonaws.com/page-1-logo.png"
+            src="https://badea.s3.amazonaws.com/_Path_%C2%A0%2B%C2%A0_Path_+(1).svg"
             style="width: 44px; margin-top: 18px"
           />
           <div class="header__content">
@@ -376,7 +375,11 @@
         للإطــــلاع عــلـــى هــذا الــــتـــقــريـــر رقـــــمــيًا، انـــــقر
         أو قم بمـســح رمــز الــوصــول الــســريــع
       </div>
-      <div class="footer__qr"></div>
+      <div class="footer__qr">
+        <a href="{{qrcodeUrl}}">
+          <img src="{{qrcode}}" style="width: 100%" />
+        </a>
+      </div>
     </div>
   </body>
 </html>
