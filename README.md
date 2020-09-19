@@ -119,7 +119,7 @@ Here’s a table of the parameters you can pass with their explanation:
     <td>String</td>
   </tr>
    <tr>
-    <td>secondNearstMosque</td>
+    <td>thirdNearstMosque</td>
     <td>String</td>
   </tr>
 </table>
