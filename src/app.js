@@ -1,6 +1,6 @@
 const express = require("express");
 const path = require("path");
-var bodyParser = require("body-parser");
+const bodyParser = require("body-parser");
 
 const app = express();
 const NextMasjidReport = require("./index.js");
