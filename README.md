@@ -132,7 +132,7 @@ This module includes a single enpoint to generate a new report, and can be used 
 To call the service :
 
 1. Change the config.js vars into your own :
-- `baseUrl` : server enpoint
+- `baseUrl` : server endpoint
 - `PORT` : port to listen to
 - `GMAP_API_KEY` key for google maps static API
 
