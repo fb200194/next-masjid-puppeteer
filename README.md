@@ -7,16 +7,7 @@ Require Node 12+.
 
 ### Usage
 
-In order to run the script you will need to run this commands and create a new next masjid report object, as follow :
-
-First install deps :
-```yarn install```
-
-Then cd into the src dic :
-```cd src```
-
-Run the script :
-```node index.js```
+In order to run the script you will need to run this commands and create a new NextMasjidReport report object, as follow :
 
 ```
 const config = {
@@ -36,6 +27,16 @@ nextMasjidReport.activate({
     ...
 });
 ```
+
+First install deps :
+`yarn install`
+
+Then cd into the src dic :
+`cd src`
+
+Run the script :
+`node index.js`
+
 
 Next masjid script accepts a config object for configuration with optional parameters and a data object pased to the global activate method to generate reports and returns final pdf file.
 
@@ -123,3 +124,40 @@ Here’s a table of the parameters you can pass with their explanation:
     <td>String</td>
   </tr>
 </table>
+
+### API - usage
+
+This module includes a single enpoint to generate a new report, and can be used as refrence for using the script.
+
+To call the service :
+
+1. Change the config.js vars into your own :
+- `baseUrl` : server enpoint
+- `PORT` : port to listen to
+- `GMAP_API_KEY` key for google maps static API
+
+2. Start the server :
+- `cd src`
+- `node app.js`
+
+3. Make a post request to
+- `${baseUrl}/api/v1/report/new`
+
+##### Body Request example
+
+```
+{
+  "scoreColor": "#ed462f",
+  "score": "83",
+  "prayersInPerimeter": 999,
+  "distanceToNearestMosque": 13.2,
+  "populationDensity": 55,
+  "mosqueDensity": 14,
+  "long": "101.650101",
+  "lat": "2.927880",
+  "qrcodeUrl": "www.google.com",
+  "firstNearstMosque": "مسجد الحارثة بن صعب - 3.2 كلم, شمال غرب",
+  "secondNearstMosque": "مسجد الفضيل بن عياض - 3.3 كلم, شمال شرق",
+  "thirdNearstMosque": "مسجد - 3.9 كلم, جنوب"
+}
+```
